@@ -470,6 +470,7 @@ class NetworkClient(
   // Open server connection based on the portfile
   private def initImpl(promptCompleteUsers: Boolean, retry: Boolean): ServerSession =
     val (sk, tkn) = connectOrStartServerAndConnect(promptCompleteUsers, retry)
+    val settled = CountDownLatch(1)
     val conn = new ServerSessionImpl(sk, s"sbt-serverconnection-${sk.getPort}"):
       override protected def onNotification(msg: JsonRpcNotificationMessage): Unit =
         msg.method match
@@ -521,16 +522,17 @@ class NetworkClient(
           case _                    => self.onNotification(msg)
       override protected def onRequest(msg: JsonRpcRequestMessage): Unit = self.onRequest(msg)
       override protected def onResponse(msg: JsonRpcResponseMessage): Unit = self.onResponse(msg)
-      override protected def onClose(): Unit = if !rebooting.get then
-        if exitClean.get then
-          val serverDropped = running.get
-          exitClean.set(!serverDropped)
-          if serverDropped && !shutdownOnly then
-            console.appendLog(Level.Error, "sbt server disconnected")
-        running.set(false)
-        interactiveThread.interrupt()
+      override protected def onClose(): Unit =
+        if !rebooting.get then
+          if exitClean.get then
+            val serverDropped = running.get
+            exitClean.set(!serverDropped)
+            if serverDropped && !shutdownOnly then
+              console.appendLog(Level.Error, "sbt server disconnected")
+          running.set(false)
+          interactiveThread.interrupt()
+        settled.countDown()
     // initiate handshake
-    val settled = CountDownLatch(1)
     initiateHandshake(Handshake(conn, settled), tkn)
     // the server refuses every other request until the handshake settles, retries included
     if !settled.await(connectTimeout.toMillis, TimeUnit.MILLISECONDS) then
