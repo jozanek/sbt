@@ -11,6 +11,7 @@ package internal
 
 import scala.collection.mutable.ListBuffer
 
+import sbt.io.IO
 import sbt.util.Level
 import sbt.util.Logger
 
@@ -25,10 +26,14 @@ object LoggingEvalReporterTest extends verify.BasicTestSuite:
 
   test("forwards compile errors to the logger") {
     val log = new RecordingLogger
-    val eval = Eval(() => EvalReporter.logging(log))
+    val scalaLibrary = Seq(classOf[Option[?]], classOf[scala.deriving.Mirror])
+      .map(IO.classLocationPath(_))
+      .distinct
+    val eval = new Eval(Nil, scalaLibrary, None, Some(() => EvalReporter.logging(log)))
     intercept[EvalException] {
       eval.evalInfer("\"\".undefined")
     }
     val errors = log.messages.collect { case (Level.Error, m) => stripAnsi(m) }
     assert(errors.exists(_.contains("undefined is not a member of String")))
   }
+end LoggingEvalReporterTest
