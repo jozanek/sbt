@@ -62,12 +62,15 @@ object NetworkClientSilentDisconnectTest extends BasicTestSuite:
   test("a dropped connection during a batch run must not exit silently"):
     withDropServer: server =>
       val base = projectWithPortfile(server.port)
+      val start = System.nanoTime
       val (code, explained) = runBatchClient(base)
+      val elapsedMs = (System.nanoTime - start) / 1000000
       assert(code == 1, s"expected exit 1, got $code")
       assert(
         explained.contains("disconnected"),
         s"client exited 1 without explaining the disconnect: '$explained'"
       )
+      assert(elapsedMs < 30000, s"client waited $elapsedMs ms for a handshake on a closed socket")
 
   test("a corrupt portfile is replaced and a fresh server connection is attempted"):
     val base = Files.createTempDirectory("corrupt-portfile-project").toFile
