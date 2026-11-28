@@ -152,7 +152,18 @@ jobs:
           ./sbt -v --server "mimaReportBinaryIssues;javafmtCheck;Test/javafmtCheck;scalafmtCheckRepo"
           # ./sbt -v --client headerCheck
           # ./sbt -v --client "Test/headerCheck"
-          ./sbt -v --server "Test/compile;doc;publishLocal;test;serverTestProj/test;all $UTIL_TESTS"
+          log="$RUNNER_TEMP/build-and-test-1.log"
+          : > "$log"
+          (
+            while sleep 60; do
+              [ -z "$(find "$log" -mmin +5)" ] && continue
+              echo "::warning::no sbt output for 5 minutes, printing thread dumps"
+              for pid in $(jps -q); do jcmd "$pid" Thread.print || true; done
+              touch "$log"
+            done
+          ) &
+          trap "kill $! || true" EXIT
+          ./sbt -v --server "Test/compile;doc;publishLocal;test;serverTestProj/test;all $UTIL_TESTS" | tee "$log"
       - name: Build and test (2)
         if: ${{ matrix.jobtype == 2 }}
         shell: bash
